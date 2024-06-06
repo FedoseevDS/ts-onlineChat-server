@@ -1,19 +1,58 @@
 const express = require('express');
-const cors = require('cors')
-
-const PORT = 5010;
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const { addUser, users } = require('./users');
+const route = require('./route');
 
 const app = express();
 
-app.use(cors())
+app.use(cors({ origin: "*" }));
+app.use(route);
 
-app.listen(PORT, () => {
-  console.log(`Server starting on port ${PORT}`)
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  },
 });
 
-app.get('/chat', (req, res) => {
-  res.json({
-    message: 'Hello from backend express.js'
+io.on('connection', (socket) => {
+  socket.emit('users', users)
+
+  socket.on('common', (data) => {
+      if (!data) {
+        return;
+      }
+
+      socket.join(data?.room);
+
+      // console.log('data', data)
+      
+      const { user } = addUser(data)
+      
+      socket.emit('message', {
+        user, message: `Добро пожаловать в "Живой чат", пользователь`
+      })
+      
+      socket.broadcast.to(data?.room).emit('message', {
+        user, message: `Присоединился новый пользователь`
+      })
   })
-  // res.send('hello world')
-})
+
+  socket.on('addChat', (data) => {
+    console.log('data', data)
+
+    socket.emit('createRoom', data)
+  })
+});
+
+io.on('disconnect', () => {
+  console.log('Disconnect');
+});
+
+server.listen(5004, () => {
+  console.log('Server is running')
+});
